@@ -1,60 +1,60 @@
-import time
-import json
-import requests
-import serial
-import modbus_tk.defines as cst
-from modbus_tk import modbus_rtu
+import time  # ใช้สำหรับการหยุดโปรแกรมชั่วคราว
+import json  # ใช้สำหรับจัดการกับข้อมูลในรูปแบบ JSON
+import requests  # ใช้สำหรับการส่งคำขอ HTTP ไปยังเซิร์ฟเวอร์
+import serial  # ใช้สำหรับการเชื่อมต่อผ่านพอร์ตอนุกรม
+import modbus_tk.defines as cst  # นำเข้า constants สำหรับโปรโตคอล Modbus
+from modbus_tk import modbus_rtu  # นำเข้าโมดูล Modbus RTU
 
-# ThingSpeak settings
-THINGSPEAK_API_KEY = '6F82C4I0ANATTF3B'
-THINGSPEAK_BASE_URL = 'https://api.thingspeak.com/update'
+# การตั้งค่า ThingSpeak
+THINGSPEAK_API_KEY = '6F82C4I0ANATTF3B'  # คีย์ API สำหรับส่งข้อมูลไปยัง ThingSpeak
+THINGSPEAK_BASE_URL = 'https://api.thingspeak.com/update'  # URL พื้นฐานสำหรับการอัปเดตข้อมูลไปยัง ThingSpeak
 
-# LINE Notify settings
-LINE_NOTIFY_URL = 'https://notify-api.line.me/api/notify'
-LINE_NOTIFY_TOKEN = 'fs8o9LcPLGcsqCflPLFT2V5kNxNk5ewJSHzn8UaaktM'
-LINE_NOTIFY_HEADERS = {
-    'content-type': 'application/x-www-form-urlencoded',
-    'Authorization': 'Bearer ' + LINE_NOTIFY_TOKEN
+# การตั้งค่า LINE Notify
+LINE_NOTIFY_URL = 'https://notify-api.line.me/api/notify'  # URL สำหรับการส่งการแจ้งเตือนไปยัง LINE Notify
+LINE_NOTIFY_TOKEN = 'fs8o9LcPLGcsqCflPLFT2V5kNxNk5ewJSHzn8UaaktM'  # โทเค็นการรับรองสิทธิ์ของ LINE Notify
+LINE_NOTIFY_HEADERS = {  # หัวข้อที่จำเป็นสำหรับการแจ้งเตือนของ LINE Notify
+    'content-type': 'application/x-www-form-urlencoded',  # ประเภทของเนื้อหา
+    'Authorization': 'Bearer ' + LINE_NOTIFY_TOKEN  # หัวข้อ Authorization พร้อมโทเค็น
 }
 
 def send_line_notification(message):
-    """Send a LINE notification with the specified message."""
-    payload = {'message': message}
-    response = requests.post(LINE_NOTIFY_URL, headers=LINE_NOTIFY_HEADERS, data=payload)
-    if response.status_code == 200:
-        print("LINE notification sent successfully!")
+    """ส่งการแจ้งเตือนทาง LINE ด้วยข้อความที่ระบุ"""
+    payload = {'message': message}  # ข้อความที่ต้องการส่ง
+    response = requests.post(LINE_NOTIFY_URL, headers=LINE_NOTIFY_HEADERS, data=payload)  # ส่งคำขอ POST ไปยัง LINE Notify
+    if response.status_code == 200:  # ตรวจสอบสถานะการตอบกลับ
+        print("ส่งการแจ้งเตือนไปยัง LINE สำเร็จ!")  # แสดงข้อความเมื่อส่งสำเร็จ
     else:
-        print(f"Failed to send LINE notification. Status code: {response.status_code}")
+        print(f"การส่งการแจ้งเตือนไปยัง LINE ล้มเหลว รหัสสถานะ: {response.status_code}")  # แสดงข้อความเมื่อส่งล้มเหลว
 
 if __name__ == "__main__":
     try:
-        # Connect to the PZEM-004T (Modbus RTU)
+        # เชื่อมต่อกับ PZEM-004T ผ่าน Modbus RTU
         serial_connection = serial.Serial(
-            port='/dev/ttyUSB0',
-            baudrate=9600,
-            bytesize=8,
-            parity='N',
-            stopbits=1,
-            xonxoff=0
+            port='/dev/ttyUSB0',  # ระบุพอร์ตที่เชื่อมต่อกับอุปกรณ์
+            baudrate=9600,  # กำหนด baud rate ของการเชื่อมต่อ
+            bytesize=8,  # ขนาดของบิตต่อไบต์
+            parity='N',  # ไม่มี parity bit
+            stopbits=1,  # จำนวน stop bit
+            xonxoff=0  # ไม่ใช้การควบคุมการไหล
         )
 
-        master = modbus_rtu.RtuMaster(serial_connection)
-        master.set_timeout(2.0)
-        master.set_verbose(True)
+        master = modbus_rtu.RtuMaster(serial_connection)  # สร้างตัวควบคุม Modbus RTU
+        master.set_timeout(2.0)  # ตั้งเวลาหมดเวลาเป็น 2 วินาที
+        master.set_verbose(True)  # เปิดโหมดแสดงรายละเอียด
 
         while True:
-            # Read data from PZEM-004T
-            data = master.execute(1, cst.READ_INPUT_REGISTERS, 0, 10)
-            
-            voltage = data[0] / 10.0
-            current_A = (data[1] + (data[2] << 16)) / 1000.0  # [A]
-            power_W = (data[3] + (data[4] << 16)) / 10.0  # [W]
-            energy_Wh = data[5] + (data[6] << 16)  # [Wh]
-            frequency_Hz = data[7] / 10.0  # [Hz]
-            power_factor = data[8] / 100.0
-            alarm = data[9]  # 0 = no alarm
+            # อ่านข้อมูลจาก PZEM-004T
+            data = master.execute(1, cst.READ_INPUT_REGISTERS, 0, 10)  # ดึงข้อมูลจาก PZEM-004T ผ่าน Modbus
 
-            # Create a dictionary to store the data
+            voltage = data[0] / 10.0  # แปลงข้อมูลแรงดันไฟฟ้า
+            current_A = (data[1] + (data[2] << 16)) / 1000.0  # แปลงข้อมูลกระแสไฟฟ้า [A]
+            power_W = (data[3] + (data[4] << 16)) / 10.0  # แปลงข้อมูลกำลังไฟฟ้า [W]
+            energy_Wh = data[5] + (data[6] << 16)  # แปลงข้อมูลพลังงานไฟฟ้าที่ใช้ [Wh]
+            frequency_Hz = data[7] / 10.0  # แปลงข้อมูลความถี่ไฟฟ้า [Hz]
+            power_factor = data[8] / 100.0  # แปลงข้อมูลค่า power factor
+            alarm = data[9]  # ดึงสถานะการเตือน (0 = ไม่มีเตือน)
+
+            # สร้าง dictionary เพื่อจัดเก็บข้อมูล
             dict_payload = {
                 "voltage": voltage,
                 "current_A": current_A,
@@ -65,39 +65,39 @@ if __name__ == "__main__":
                 "alarm": alarm
             }
 
-            # Print the data for debugging
+            # แสดงข้อมูลเพื่อการดีบัก
             print(json.dumps(dict_payload, indent=2))
 
-            # Prepare data for ThingSpeak upload
+            # เตรียมข้อมูลเพื่ออัปโหลดไปยัง ThingSpeak
             thingspeak_payload = {
-                'api_key': THINGSPEAK_API_KEY,
-                'field1': voltage,        # Field 1: Voltage
-                'field2': current_A,      # Field 2: Current
-                'field3': power_W,        # Field 3: Power
-                'field4': energy_Wh,      # Field 4: Energy
-                'field5': frequency_Hz,   # Field 5: Frequency
-                'field6': power_factor,   # Field 6: Power Factor
-                'field7': alarm           # Field 7: Alarm Status
+                'api_key': THINGSPEAK_API_KEY,  # ใช้คีย์ API ของ ThingSpeak
+                'field1': voltage,  # ช่อง 1: แรงดันไฟฟ้า
+                'field2': current_A,  # ช่อง 2: กระแสไฟฟ้า
+                'field3': power_W,  # ช่อง 3: กำลังไฟฟ้า
+                'field4': energy_Wh,  # ช่อง 4: พลังงานไฟฟ้า
+                'field5': frequency_Hz,  # ช่อง 5: ความถี่ไฟฟ้า
+                'field6': power_factor,  # ช่อง 6: ค่า power factor
+                'field7': alarm  # ช่อง 7: สถานะการเตือน
             }
 
-            # Send the data to ThingSpeak
-            response = requests.get(THINGSPEAK_BASE_URL, params=thingspeak_payload)
-            if response.status_code == 200:
-                print("Data successfully sent to ThingSpeak")
+            # ส่งข้อมูลไปยัง ThingSpeak
+            response = requests.get(THINGSPEAK_BASE_URL, params=thingspeak_payload)  # ส่งคำขอ GET ไปยัง ThingSpeak
+            if response.status_code == 200:  # ตรวจสอบว่าการส่งสำเร็จหรือไม่
+                print("ส่งข้อมูลไปยัง ThingSpeak สำเร็จ")  # แสดงข้อความเมื่อส่งสำเร็จ
             else:
-                print(f"Failed to send data to ThingSpeak. Status code: {response.status_code}")
+                print(f"การส่งข้อมูลไปยัง ThingSpeak ล้มเหลว รหัสสถานะ: {response.status_code}")  # แสดงข้อความเมื่อส่งล้มเหลว
 
-            # Check if power exceeds 3500 watts
+            # ตรวจสอบว่ากำลังไฟฟ้าเกิน 3500 วัตต์หรือไม่
             if power_W > 3500:
-                notification_message = f"Alert! Power consumption has exceeded 3500W: {power_W}W"
-                send_line_notification(notification_message)
+                notification_message = f"เตือน! การใช้พลังงานเกิน 3500W: {power_W}W"  # สร้างข้อความการแจ้งเตือน
+                send_line_notification(notification_message)  # ส่งการแจ้งเตือนไปยัง LINE
 
-            # Wait before sending the next data
+            # หยุดโปรแกรมชั่วคราวก่อนทำงานซ้ำ
             time.sleep(15)
 
-    except KeyboardInterrupt:
-        print('Exiting the script...')
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    except KeyboardInterrupt:  # จับสัญญาณการหยุดโปรแกรมจากคีย์บอร์ด
+        print('ออกจากสคริปต์...')
+    except Exception as e:  # จับข้อผิดพลาดอื่นๆ
+        print(f"เกิดข้อผิดพลาด: {e}")  # แสดงข้อความข้อผิดพลาด
     finally:
-        master.close()
+        master.close()  # ปิดการเชื่อมต่อ Modbus
